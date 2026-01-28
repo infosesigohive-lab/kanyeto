@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(USER)
+  teams     TeamMember[]
+  vendor    Vendor?  @relation(fields: [vendorId], references: [id])
+  vendorId  String?
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  COACH
+  VENDOR
+  SUPERADMIN
+  USER
+}
+
+model League {
+  id        String   @id @default(uuid())
+  name      String
+  teams     Team[]
+  createdAt DateTime @default(now())
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String
+  league    League   @relation(fields: [leagueId], references: [id])
+  leagueId  String
+  roster    Player[]
+  members   TeamMember[]
+  createdAt DateTime @default(now())
+}
+
+model TeamMember {
+  id       String @id @default(uuid())
+  user     User   @relation(fields: [userId], references: [id])
+  userId   String
+  team     Team   @relation(fields: [teamId], references: [id])
+  teamId   String
+  role     String // e.g., COACH, ASSISTANT
+}
+
+model Player {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  dob       DateTime?
+  team      Team?    @relation(fields: [teamId], references: [id])
+  teamId    String?
+  injuries  Injury[]
+}
+
+model Injury {
+  id          String   @id @default(uuid())
+  player      Player   @relation(fields: [playerId], references: [id])
+  playerId    String
+  reportedBy  String   // userId of reporter
+  description String
+  severity    String
+  status      String   @default("reported")
+  createdAt   DateTime @default(now())
+}
+
+model Vendor {
+  id          String   @id @default(uuid())
+  name        String
+  contactInfo String?
+  products    Product[]
+  createdAt   DateTime @default(now())
+}
+
+model Product {
+  id        String   @id @default(uuid())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId  String
+  name      String
+  priceCents Int
+  createdAt DateTime @default(now())
+}

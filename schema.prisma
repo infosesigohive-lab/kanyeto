@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  VENDOR
+  PLAYER
+}
+
+enum InjurySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReferralStatus {
+  NONE
+  PENDING
+  REFERRED
+  COMPLETED
+}
+
+enum FixtureStatus {
+  SCHEDULED
+  POSTPONED
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id         String    @id @default(uuid()) @map("id")
+  email      String    @unique @map("email")
+  name       String?   @map("name")
+  role       Role      @default(PLAYER) @map("role")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // relations
+  teamsManaged Team[]      @relation("ManagerTeams", references: [id])
+  players      Player[]    @relation("UserPlayers")
+  vendor       Vendor?     @relation(fields: [vendorId], references: [id])
+  vendorId     String?     @map("vendor_id")
+  orders       Order[]     @relation("UserOrders")
+}
+
+model League {
+  id        String   @id @default(uuid()) @map("id")
+  name      String   @unique @map("name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  teams    Team[]
+  fixtures Fixture[]
+}
+
+model Team {
+  id         String   @id @default(uuid()) @map("id")
+  name       String   @map("name")
+  slug       String   @unique @map("slug")
+  league     League   @relation(fields: [leagueId], references: [id])
+  leagueId   String   @map("league_id")
+  manager    User?    @relation("ManagerTeams", fields: [managerId], references: [id])
+  managerId  String?  @map("manager_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  players Player[]
+  fixturesHome Fixture[] @relation("HomeFixtures")
+  fixturesAway Fixture[] @relation("AwayFixtures")
+}
+
+model Player {
+  id        String   @id @default(uuid()) @map("id")
+  user      User?    @relation("UserPlayers", fields: [userId], references: [id])
+  userId    String?  @map("user_id")
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  dob       DateTime? @map("dob")
+  team      Team?    @relation(fields: [teamId], references: [id])
+  teamId    String?  @map("team_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  injuries Injury[]
+}
+
+model Fixture {
+  id            String        @id @default(uuid()) @map("id")
+  league        League        @relation(fields: [leagueId], references: [id])
+  leagueId      String        @map("league_id")
+  homeTeam      Team          @relation("HomeFixtures", fields: [homeTeamId], references: [id])
+  homeTeamId    String        @map("home_team_id")
+  awayTeam      Team          @relation("AwayFixtures", fields: [awayTeamId], references: [id])
+  awayTeamId    String        @map("away_team_id")
+  scheduledAt   DateTime      @map("scheduled_at")
+  venue         String?       @map("venue")
+  status        FixtureStatus @default(SCHEDULED) @map("status")
+  homeScore     Int?          @map("home_score")
+  awayScore     Int?          @map("away_score")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+}
+
+model Injury {
+  id              String         @id @default(uuid()) @map("id")
+  player          Player         @relation(fields: [playerId], references: [id])
+  playerId        String         @map("player_id")
+  reportedBy      User?          @relation(fields: [reportedById], references: [id])
+  reportedById    String?        @map("reported_by_id")
+  injuryType      String         @map("injury_type")
+  severity        InjurySeverity @default(MEDIUM) @map("severity")
+  referralStatus  ReferralStatus @default(NONE) @map("referral_status")
+  referredTo      String?        @map("referred_to")        // e.g., "AO Clinic"
+  referralDate    DateTime?      @map("referral_date")
+  referralRef     String?        @map("referral_reference") // external clinic reference / ticket
+  notes           String?        @map("notes")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+}
+
+model Vendor {
+  id         String   @id @default(uuid()) @map("id")
+  name       String   @map("name")
+  contact    String?  @map("contact_info")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  products   Product[]
+  users      User[]   @relation("VendorUsers")
+}
+
+model Product {
+  id         String   @id @default(uuid()) @map("id")
+  vendor     Vendor   @relation(fields: [vendorId], references: [id])
+  vendorId   String   @map("vendor_id")
+  sku        String?  @unique @map("sku")
+  name       String   @map("name")
+  priceCents Int      @map("price_cents") // store money as integer cents
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+}
+
+model Order {
+  id                    String      @id @default(uuid()) @map("id")
+  buyer                 User        @relation("UserOrders", fields: [buyerId], references: [id])
+  buyerId               String      @map("buyer_id")
+  product               Product     @relation(fields: [productId], references: [id])
+  productId             String      @map("product_id")
+  quantity              Int         @default(1) @map("quantity")
+  orderTotalCents       Int         @map("order_total_cents") // price * qty in cents
+  commissionPercentage  Decimal     @db.Decimal(5,4) @default("0.10") @map("commission_percentage")
+  // commission_amount_cents is computed at DB-level in the SQL migration as a GENERATED column
+  commissionAmountCents Int?        @map("commission_amount_cents")
+  status                OrderStatus @default(PENDING) @map("status")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+}
